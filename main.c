@@ -5,18 +5,39 @@
 #include <sys/stat.h>
 
 typedef char *String;
-typedef char Byte;
+typedef unsigned char Byte;
 
-// One instruction = UNSIGNED SHORT data type = 2 bytes = 16 bits
-long File_Get_Size(String filename) {
+typedef struct Prog {
+  unsigned short *data;
+  int size;
+} Prog;
+
+/*
+ * Function: File_Get_Size
+ *
+ * name : file name
+ *
+ * returns size in bytes of the filename
+ */
+long File_Get_Size(String name) {
   struct stat info;
-  if (stat(filename, &info) != 0) {
+  if (stat(name, &info) != 0) {
     return -1;
   }
   return info.st_size;
 }
 
-void File_Read(String name) {
+/*
+ * Function : Prog_Parse
+ * Read the program byte by byte, and pack by two bits in unsigned short (= 2
+ * bits)
+ *
+ * name : File name
+ *
+ * returns: struct Prog
+ */
+
+Prog Prog_Parse(String name) {
   FILE *fp;
   fp = fopen(name, "rb");
   long file_size = File_Get_Size(name);
@@ -29,13 +50,34 @@ void File_Read(String name) {
 
   int j = 0;
   for (int i = 0; i < file_size - 1; i += 2) {
-    unsigned short combined = (content[i] << 8) + (content[i + 1]);
+    unsigned short combined = (content[i] << 8) | (content[i + 1]);
     data[j++] = combined;
-    printf(" %02x ", data[j - 1]);
-    if (j % 8 == 0) {
+  }
+  free(content);
+  Prog prog;
+  prog.data = data;
+  prog.size = file_size / 2;
+  return prog;
+}
+
+/* Function: Print_Prog
+ * Print the content of the data in a struct Prog
+ *
+ * prog : struct Prog
+ *
+ * return : void
+ */
+
+void Print_Prog(Prog prog) {
+  for (int i = 0; i < prog.size; i++) {
+    printf("%04x  ", prog.data[i]);
+    if ((i + 1) % 8 == 0) {
       printf("\n");
     }
   }
 }
 
-int main() { File_Read("airplane.ch8"); }
+int main() {
+  Prog prog = Prog_Parse("airplane.ch8");
+  Print_Prog(prog);
+}
