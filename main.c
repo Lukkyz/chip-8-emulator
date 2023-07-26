@@ -7,6 +7,10 @@
 typedef char *String;
 typedef unsigned char Byte;
 
+Byte registers[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+// Program counter
+unsigned int pc = 0;
+
 typedef struct Prog {
   unsigned short *data;
   int size;
@@ -77,7 +81,31 @@ void Print_Prog(Prog prog) {
   }
 }
 
+/* Function: Prog_Run
+ * Read instructions
+ *
+ * prog : struct Prog
+ *
+ *
+ */
+void Prog_Run(Prog prog) {
+  while (1) {
+    unsigned short instruction = prog.data[pc];
+    Byte current_register = (instruction >> (8 * 1)) & 0xff;
+    char value = (instruction)&0xff;
+    current_register = current_register & 0x0f;
+    registers[current_register] = value;
+
+    if (pc == 4)
+      break;
+    pc += 1;
+  }
+  for (int i = 0; i < 16; i++) {
+    printf("%d\n", registers[i]);
+  }
+}
+
 int main() {
   Prog prog = Prog_Parse("airplane.ch8");
-  Print_Prog(prog);
+  Prog_Run(prog);
 }
