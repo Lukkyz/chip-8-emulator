@@ -1,3 +1,4 @@
+#include "./stack.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,6 +7,8 @@
 
 typedef char *String;
 typedef unsigned char Byte;
+
+Stack stack = {.top = -1};
 
 Byte registers[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
 // Program counter
@@ -107,5 +110,5 @@ void Prog_Run(Prog prog) {
 
 int main() {
   Prog prog = Prog_Parse("airplane.ch8");
-  Prog_Run(prog);
+  printf("%d\n", stack.top);
 }
