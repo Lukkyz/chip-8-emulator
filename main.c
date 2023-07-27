@@ -1,16 +1,23 @@
 #include "./stack.h"
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_render.h>
 #include <errno.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 
+#define REGISTER_SIZE 16
 typedef char *String;
 typedef unsigned char Byte;
 
 Stack stack = {.top = -1};
 
-Byte registers[16] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+Byte registers[REGISTER_SIZE] = {1, 2,  3,  4,  5,  6,  7,  8,
+                                 9, 10, 11, 12, 13, 14, 15, 16};
+
+unsigned short addr_register = 0;
 // Program counter
 unsigned int pc = 0;
 
@@ -71,8 +78,6 @@ Prog Prog_Parse(String name) {
  * Print the content of the data in a struct Prog
  *
  * prog : struct Prog
- *
- * return : void
  */
 
 void Print_Prog(Prog prog) {
@@ -84,31 +89,76 @@ void Print_Prog(Prog prog) {
   }
 }
 
+/* Function: Opcode_Read
+ * Read, parse and run opcode
+ *
+ * unsigned short opcode
+ */
+void Opcode_Read(unsigned short opcode) {
+  Byte instruction = (opcode >> 12) & 0xff;
+  switch (instruction) {
+  case 0x6: {
+    Byte reg = (opcode >> 8) & 0x0f;
+    Byte value = (opcode)&0xff;
+    registers[reg] = value;
+  } break;
+  case 0x2: {
+    unsigned short value = (opcode & 0x0fff);
+    value = truncf((value - 0x200) / 2) - 1;
+    Stack_Push(&stack, &value);
+    pc = value;
+  } break;
+  case 0x7: {
+    Byte reg = (opcode >> 8) & 0x0f;
+    Byte value = (opcode)&0xff;
+    registers[reg] += value;
+  } break;
+  case 0xa: {
+    addr_register = truncf((opcode & 0x0fff - 0x200) / 2);
+    printf("%d\n", addr_register);
+  } break;
+  }
+}
+
 /* Function: Prog_Run
  * Read instructions
  *
  * prog : struct Prog
- *
- *
  */
 void Prog_Run(Prog prog) {
   while (1) {
     unsigned short instruction = prog.data[pc];
-    Byte current_register = (instruction >> (8 * 1)) & 0xff;
-    char value = (instruction)&0xff;
-    current_register = current_register & 0x0f;
-    registers[current_register] = value;
-
-    if (pc == 4)
+    printf("instr %d %02x\n", pc, instruction);
+    Opcode_Read(instruction);
+    if (pc == 5 || pc == prog.size - 1) {
       break;
+    }
     pc += 1;
-  }
-  for (int i = 0; i < 16; i++) {
-    printf("%d\n", registers[i]);
   }
 }
 
 int main() {
   Prog prog = Prog_Parse("airplane.ch8");
-  printf("%d\n", stack.top);
+  // SDL_Init(SDL_INIT_VIDEO);
+
+  // SDL_Window *window = SDL_CreateWindow("Chip-8", SDL_WINDOWPOS_UNDEFINED,
+  //                                       SDL_WINDOWPOS_UNDEFINED, 1280, 640,
+  //                                       0);
+
+  // SDL_Renderer *renderer =
+  //     SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
+
+  // SDL_SetRenderDrawColor(renderer, 255, 225, 125, 255);
+
+  // SDL_RenderDrawPoint(renderer, 1200, 600);
+
+  // SDL_RenderPresent(renderer);
+
+  // SDL_Delay(5000);
+
+  // SDL_DestroyRenderer(renderer);
+  // SDL_DestroyWindow(window);
+  // SDL_Quit();
+
+  Prog_Run(prog);
 }
