@@ -11,7 +11,7 @@
  * -1 if stack is full
  *  0 if data has been added
  */
-int Stack_Push(Stack *stack, unsigned short *data) {
+int Stack_Push(Stack *stack, unsigned int *data) {
   if (stack->top == SIZE - 1) {
     return -1;
   }
