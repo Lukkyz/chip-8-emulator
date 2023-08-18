@@ -1,8 +1,6 @@
 #include "./stack.h"
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_events.h>
-#include <SDL2/SDL_keycode.h>
-#include <SDL2/SDL_render.h>
+
+#include "./graphics.h"
 #include <errno.h>
 #include <limits.h>
 #include <math.h>
@@ -18,19 +16,13 @@
 
 #define REGISTER_SIZE 16
 
-#define DISPLAY_HEIGHT 32
-#define DISPLAY_WIDTH 64
-
 typedef char *String;
 typedef unsigned char Byte;
 
 Stack stack = {.top = -1};
 
-SDL_Window *window;
-SDL_Renderer *renderer;
-
-Byte registers[REGISTER_SIZE] = {1, 2,  3,  4,  5,  6,  7,  8,
-                                 9, 10, 11, 12, 13, 14, 15, 16};
+Byte registers[REGISTER_SIZE] = {0, 0, 0, 0, 0, 0, 0, 0,
+                                 0, 0, 0, 0, 0, 0, 0, 0};
 
 bool display[32][64];
 
@@ -118,55 +110,35 @@ Prog Prog_Parse(String name) {
   return prog;
 }
 
-/* Function: Print_Prog
- * Print the content of the data in a struct Prog
- *
- * prog : struct Prog
- */
-
-void Print_Prog(Prog prog) {
-  for (int i = 0; i < prog.size; i++) {
-    if ((i + 1) % 8 == 0) {
-      printf("\n");
-    }
-  }
-}
-
-void Draw_Display() {
-  for (int i = 0; i < DISPLAY_WIDTH; i++) {
-    for (int j = 0; j < DISPLAY_HEIGHT; j++) {
-      bool is_set = display[j][i];
-      if (is_set) {
-        SDL_Rect rect = {i * 10, j * 10, 9, 9};
-        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-        SDL_RenderFillRect(renderer, &rect);
-      }
-    }
-  }
-  SDL_RenderPresent(renderer);
-}
-
 void Update_Display(int x, int y, int n, Prog prog) {
   Byte bytes[n];
 
   memcpy(bytes, prog.data + addr_register, n);
 
-  int b = 0;
+  registers[0xF] = 0;
   for (int i = 0; i < n; i++) {
     for (int j = 0; j < 8; j++) {
-      bool current = display[(i + y) % 32][(j + x) % 64];
-      bool v = (bytes[b] >> (8 - 1 - j)) & 1;
-      if (current == 1 && v == 1) {
+      unsigned int a = (i + y) % 32;
+      unsigned int b = (j + x) % 64;
+      bool current = display[a][b];
+      bool v = (bytes[i] >> (8 - 1 - j)) & 1;
+      if (current && v) {
         registers[0xF] = 1;
-      } else {
-        registers[0xF] = 0;
       }
-      display[(i + y) % 32][(j + x) % 64] = v;
+      display[a][b] ^= v;
     }
-    b++;
   }
 
-  Draw_Display();
+  Draw_Display(display);
+}
+
+void Print_Debug() {
+  printf("\x1b[H\x1b[J");
+  for (int i = 0; i < 16; i++) {
+    printf("V%02X : %02X\n", i, registers[i]);
+  }
+  printf("I : %02X\n", addr_register);
+  printf("PC : %02X\n", pc);
 }
 
 /* Function: Opcode_Read
@@ -185,8 +157,8 @@ void Opcode_Read(Byte opcode, Byte arg, Prog prog) {
         unsigned short addr = Stack_Pop(&stack);
         pc = addr;
       } else if (arg == 0xE0) {
-        memset(display, 0, 32 * 64);
-        Draw_Display();
+        memset(display, 0, DISPLAY_WIDTH * DISPLAY_HEIGHT);
+        Draw_Display(display);
       }
     } else {
       unsigned short value = ((opcode & 0x0f) << 8) | arg;
@@ -263,12 +235,12 @@ void Opcode_Read(Byte opcode, Byte arg, Prog prog) {
       registers[dest] += registers[src];
     } break;
     case 0x5: {
-      registers[dest] -= registers[src];
       if (registers[dest] > registers[src]) {
         registers[0xf] = 1;
       } else {
         registers[0xf] = 0;
       }
+      registers[dest] -= registers[src];
     } break;
     case 0x6: {
       if (registers[dest] & 1) {
@@ -286,8 +258,8 @@ void Opcode_Read(Byte opcode, Byte arg, Prog prog) {
       }
       registers[dest] = registers[src] - registers[dest];
     } break;
-    case 0x8: {
-      if (registers[dest] & 1) {
+    case 0xE: {
+      if (registers[dest] & 0x80) {
         registers[0xf] = 1;
       } else {
         registers[0xf] = 0;
@@ -299,8 +271,8 @@ void Opcode_Read(Byte opcode, Byte arg, Prog prog) {
 
   case 0x9: {
     Byte x = (opcode & 0x0f);
-    Byte y = (opcode & 0xf0);
-    if (x != y) {
+    Byte y = arg & 0xf0;
+    if (registers[x] != registers[y]) {
       pc += 2;
     }
   } break;
@@ -336,13 +308,12 @@ void Opcode_Read(Byte opcode, Byte arg, Prog prog) {
     Byte key = opcode & 0x0f;
     switch (arg) {
     case 0x9E: {
-      if (in.key[key] == 1) {
-        printf("PRESSED\n");
+      if (in.key[registers[key]] == 1) {
         pc += 2;
       }
     } break;
     case 0xA1: {
-      if (in.key[key] == 0) {
+      if (in.key[registers[key]] == 0) {
         pc += 2;
       }
     } break;
@@ -386,7 +357,6 @@ void Opcode_Read(Byte opcode, Byte arg, Prog prog) {
 
     case 0x33: {
       Byte reg = (opcode & 0x0f);
-      int value = registers[reg];
       prog.data[addr_register] = registers[reg] / 100;
       prog.data[addr_register + 1] = (registers[reg] / 10) % 10;
       prog.data[addr_register + 2] = (registers[reg] % 100) % 10;
@@ -407,7 +377,6 @@ void Opcode_Read(Byte opcode, Byte arg, Prog prog) {
   } break;
 
   default: {
-    printf("%02x\n", instruction);
   } break;
   }
 }
@@ -432,38 +401,17 @@ void Init_Display() {
 
 int main() {
   memset(&in, 0, sizeof(in));
-  Init_Display();
+
+  Init_Window();
 
   Prog prog = Prog_Parse("airplane.ch8");
-
-  if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-    fprintf(stderr, "SDL_Init Error: %s\n", SDL_GetError());
-    return 1;
-  }
-
-  window = SDL_CreateWindow("SDL2 Rectangle Drawing", SDL_WINDOWPOS_UNDEFINED,
-                            SDL_WINDOWPOS_UNDEFINED, DISPLAY_WIDTH * 10,
-                            DISPLAY_HEIGHT * 10, SDL_WINDOW_SHOWN);
-
-  if (!window) {
-    fprintf(stderr, "SDL_CreateWindow Error: %s\n", SDL_GetError());
-    SDL_Quit();
-    return 1;
-  }
-
-  renderer = SDL_CreateRenderer(
-      window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-
-  if (!renderer) {
-    fprintf(stderr, "SDL_CreateRenderer Error: %s\n", SDL_GetError());
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    return 1;
-  }
 
   SDL_Event event;
   bool running = true;
   while (running) {
+    if (registers[0x0F]) {
+      printf("TOUCH\n");
+    }
     if (delay_timer > 0) {
       delay_timer--;
     }
@@ -485,7 +433,7 @@ int main() {
       if (event.type == SDL_KEYUP) {
         for (int i = 0; i < 16; i++) {
           if (event.key.keysym.sym == keymap[i]) {
-            in.key[i] = 1;
+            in.key[i] = 0;
           }
         }
       }
@@ -496,13 +444,11 @@ int main() {
     if (pc == prog.size - 1) {
       break;
     }
-    SDL_Delay(100);
+    SDL_Delay(5);
     pc += 2;
   }
 
   free(prog.data);
 
-  SDL_DestroyRenderer(renderer);
-  SDL_DestroyWindow(window);
-  SDL_Quit();
+  Free_Window();
 }
